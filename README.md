@@ -7,8 +7,7 @@
     <a href="https://discord.gg/T3dSC3ReuS"><img src="https://img.shields.io/discord/733964971842732042?label=discord&logo=discord" alt="Discord Badge"></a>
 </p>
 
-`xone` is a Linux kernel driver for Xbox One and Xbox Series X|S accessories. It serves as a modern replacement for
-`xpad`, aiming to be compatible with Microsoft's *Game Input Protocol* (GIP).
+`xonedo` is a Linux kernel driver for Xbox One and Xbox Series X|S accessories using the Xbox Wireless Dongle.
 
 > [!NOTE]
 > The original project is in maintance mode, please refer to this one for updates and issues.
@@ -17,12 +16,11 @@
 
 ## Compatibility
 
-- [x] Wired devices (via USB)
+- [ ] Wired devices (check out [`xone`](https://github.com/dlundqvist/xone))
 - [x] Wireless devices (with Xbox Wireless Dongle)
 - [ ] Bluetooth devices (check out [`xpadneo`](https://github.com/atar-axis/xpadneo))
 
-Installing `xone` will disable the `xpad` kernel driver. If you are still using Xbox or Xbox 360 peripherals,
-you will have to install [`xpad-noone`](https://github.com/forkymcforkface/xpad-noone) as a replacement for `xpad`.
+Installing `xonedo` will NOT disable the `xpad` kernel driver.
 
 ## Important notes
 
