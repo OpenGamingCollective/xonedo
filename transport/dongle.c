@@ -520,11 +520,16 @@ static int xone_dongle_add_client(struct xone_dongle *dongle, u8 *addr)
 	int i, err;
 	unsigned long flags;
 
-	/* reject duplicate: controller already has a WCID slot */
+	/*
+	 * Controller already has a WCID slot: it retransmits its request
+	 * because our association response got lost, so send it again
+	 * instead of allocating a second slot.
+	 */
 	for (i = 0; i < XONE_DONGLE_MAX_CLIENTS; i++)
 		if (dongle->clients[i] &&
 		    ether_addr_equal(dongle->clients[i]->address, addr))
-			return 0;
+			return xone_mt76_associate_client(&dongle->mt,
+							  i + 1, addr);
 
 	client = xone_dongle_create_client(dongle, addr);
 	if (IS_ERR(client))
@@ -846,6 +851,14 @@ static int xone_dongle_process_frame(struct xone_dongle *dongle,
 	if (skb->len < hdr_len || hdr_len < sizeof(*hdr))
 		return 0;
 
+	/*
+	 * Drop frames with a non-zero protocol version. Misparsed or
+	 * foreign frames otherwise get matched as association requests
+	 * (subtype 0) and flood the client table with bogus addresses.
+	 */
+	if (hdr->frame_control & cpu_to_le16(IEEE80211_FCTL_VERS))
+		return 0;
+
 	skb_pull(skb, hdr_len);
 	type = le16_to_cpu(hdr->frame_control);
 
@@ -858,8 +871,10 @@ static int xone_dongle_process_frame(struct xone_dongle *dongle,
 		 * carrying multicast or all-zero source addresses (addr2).
 		 * A real controller always uses a valid unicast address.
 		 * Accepting invalid addresses exhausts the client table.
+		 * A real request is also always addressed to the dongle.
 		 */
-		if (!is_valid_ether_addr(hdr->addr2))
+		if (!is_valid_ether_addr(hdr->addr2) ||
+		    !ether_addr_equal(hdr->addr1, dongle->mt.address))
 			return 0;
 		return xone_dongle_handle_association(dongle, hdr->addr2);
 	case IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_DISASSOC:
