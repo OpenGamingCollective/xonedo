@@ -248,7 +248,6 @@ static void gip_register_client(struct work_struct *work)
 	client->dev.parent = &client->adapter->dev;
 	client->dev.type = &gip_client_type;
 	client->dev.bus = &gip_bus_type;
-	sema_init(&client->drv_lock, 1);
 	dev_set_name(&client->dev, "gip%d.%u", client->adapter->id, client->id);
 
 	err = device_register(&client->dev);
