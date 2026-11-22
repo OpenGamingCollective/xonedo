@@ -6,6 +6,12 @@
 #include <linux/slab.h>
 #include <linux/bitfield.h>
 #include <linux/uuid.h>
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+#include <linux/unaligned.h>
+#else
+#include <asm/unaligned.h>
+#endif
 
 #include "bus.h"
 
@@ -1023,7 +1029,7 @@ static int gip_parse_classes(struct gip_client *client,
 		if (len < off + sizeof(str_len))
 			return -EINVAL;
 
-		str_len = le16_to_cpup((__le16 *)(data + off));
+		str_len = get_unaligned_le16(data + off);
 		off += sizeof(str_len);
 		if (!str_len || len < off + str_len)
 			return -EINVAL;
