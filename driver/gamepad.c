@@ -129,6 +129,8 @@ struct gip_gamepad_rumble {
 	spinlock_t lock;
 	unsigned long last;
 	struct timer_list timer;
+	/* set on remove: the input device outlives it and may still queue */
+	bool stopped;
 	struct gip_gamepad_pkt_rumble pkt;
 
 	struct gip_gamepad *parent;
@@ -186,7 +188,7 @@ static int gip_gamepad_queue_rumble(struct input_dev *dev, void *data,
 	rumble->pkt.right = mag_right * GIP_GP_RUMBLE_MAX / U16_MAX;
 
 	/* delay rumble to work around firmware bug */
-	if (!timer_pending(&rumble->timer))
+	if (!rumble->stopped && !timer_pending(&rumble->timer))
 		mod_timer(&rumble->timer, rumble->last + GIP_GP_RUMBLE_DELAY);
 
 	spin_unlock_irqrestore(&rumble->lock, flags);
@@ -532,6 +534,16 @@ static int gip_gamepad_probe(struct gip_client *client)
 static void gip_gamepad_remove(struct gip_client *client)
 {
 	struct gip_gamepad *gamepad = dev_get_drvdata(&client->dev);
+	unsigned long flags;
+
+	/*
+	 * The input device is devres-managed and unregistered only after
+	 * remove() returns. Until then a game can still send rumble effects,
+	 * which would re-arm the timer and fire it after the gamepad is freed.
+	 */
+	spin_lock_irqsave(&gamepad->rumble.lock, flags);
+	gamepad->rumble.stopped = true;
+	spin_unlock_irqrestore(&gamepad->rumble.lock, flags);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6,15,0)
 	del_timer_sync(&gamepad->rumble.timer);
