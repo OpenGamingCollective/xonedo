@@ -181,8 +181,12 @@ static int xone_dongle_get_buffer(struct gip_adapter *adap,
 		return -ENOSPC;
 
 	skb = xone_mt76_alloc_message(XONE_DONGLE_LEN_CMD_PKT, GFP_ATOMIC);
-	if (!skb)
+	if (!skb) {
+		/* give the URB back, or the pool shrinks for good */
+		usb_anchor_urb(urb, &client->dongle->urbs_out_idle);
+		usb_free_urb(urb);
 		return -ENOMEM;
+	}
 
 	/* command header + WCID data + TXWI + QoS header + padding */
 	/* see xone_dongle_prep_packet and xone_mt76_prep_message */
@@ -1235,6 +1239,13 @@ static int xone_dongle_power_off_client(struct xone_dongle *dongle, int index,
 static int xone_dongle_power_off_clients(struct xone_dongle *dongle)
 {
 	if (dongle->fw_state != XONE_DONGLE_FW_STATE_READY)
+		return 0;
+
+	/*
+	 * Unplugged: the power-off packets can't be sent, so waiting for the
+	 * clients to disconnect would only time out.
+	 */
+	if (dongle->mt.udev->state == USB_STATE_NOTATTACHED)
 		return 0;
 
 	for (int i = 0; i < XONE_DONGLE_MAX_CLIENTS; i++)
