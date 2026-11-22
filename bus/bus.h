@@ -71,6 +71,8 @@ struct gip_client {
 	struct work_struct work_unregister;
 
 	struct gip_chunk_buffer *chunk_buf_out;
+	/* chunk_buf_in is set by senders and used by the RX path */
+	spinlock_t chunk_in_lock;
 	struct gip_chunk_buffer *chunk_buf_in;
 	struct gip_hardware hardware;
 

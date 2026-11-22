@@ -408,6 +408,7 @@ err_unlock:
 static int gip_send_pkt(struct gip_client *client,
 			struct gip_header *hdr, void *data)
 {
+	unsigned long flags;
 	int err;
 
 	/* packet fits into single buffer */
@@ -420,19 +421,34 @@ static int gip_send_pkt(struct gip_client *client,
 	hdr->chunk_offset = hdr->packet_length;
 	hdr->packet_length = GIP_PKT_MAX_LENGTH;
 
-	err = gip_send_pkt_simple(client, hdr, data);
-	if (err)
-		return err;
+	/*
+	 * The buffer for all chunks must exist before the first chunk goes
+	 * out: the client's acknowledgment can arrive on the RX path right
+	 * away, and it is dropped if there is no buffer yet.
+	 */
+	spin_lock_irqsave(&client->chunk_in_lock, flags);
 
-	/* allocate output buffer for all chunks */
 	err = gip_init_chunk_buffer(client, hdr, &client->chunk_buf_in, false);
 	if (err)
-		return err;
+		goto out_unlock;
 
 	if (data)
 		memcpy(client->chunk_buf_in->data, data, hdr->chunk_offset);
 
-	return 0;
+	err = gip_send_pkt_simple(client, hdr, data);
+	if (err) {
+		kfree(client->chunk_buf_in);
+		client->chunk_buf_in = NULL;
+		goto out_unlock;
+	}
+
+	/* the remaining chunks reuse the sequence number of the first one */
+	client->chunk_buf_in->header.sequence = hdr->sequence;
+
+out_unlock:
+	spin_unlock_irqrestore(&client->chunk_in_lock, flags);
+
+	return err;
 }
 
 static int gip_acknowledge_pkt(struct gip_client *client,
@@ -1108,15 +1124,12 @@ static int gip_send_remaining_chunks(struct gip_client *client, u32 offset)
 	return 0;
 }
 
-static int gip_handle_pkt_acknowledge(struct gip_client *client,
-				      void *data, u32 len)
+/* called with chunk_in_lock held */
+static int gip_handle_chunk_acknowledge(struct gip_client *client,
+					struct gip_pkt_acknowledge *pkt)
 {
-	struct gip_pkt_acknowledge *pkt = data;
 	struct gip_chunk_buffer *buf = client->chunk_buf_in;
 	struct gip_header hdr;
-
-	if (len != sizeof(*pkt))
-		return -EINVAL;
 
 	if (!buf)
 		return 0;
@@ -1147,6 +1160,22 @@ static int gip_handle_pkt_acknowledge(struct gip_client *client,
 	client->chunk_buf_in = NULL;
 
 	return gip_send_pkt_simple(client, &hdr, NULL);
+}
+
+static int gip_handle_pkt_acknowledge(struct gip_client *client,
+				      void *data, u32 len)
+{
+	unsigned long flags;
+	int err;
+
+	if (len != sizeof(struct gip_pkt_acknowledge))
+		return -EINVAL;
+
+	spin_lock_irqsave(&client->chunk_in_lock, flags);
+	err = gip_handle_chunk_acknowledge(client, data);
+	spin_unlock_irqrestore(&client->chunk_in_lock, flags);
+
+	return err;
 }
 
 static int gip_handle_pkt_announce(struct gip_client *client,

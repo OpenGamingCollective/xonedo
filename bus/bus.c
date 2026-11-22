@@ -288,6 +288,7 @@ struct gip_client *gip_get_client(struct gip_adapter *adap, u8 id)
 	client->id = id;
 	client->adapter = adap;
 	sema_init(&client->drv_lock, 1);
+	spin_lock_init(&client->chunk_in_lock);
 	INIT_WORK(&client->work_register, gip_register_client);
 	INIT_WORK(&client->work_unregister, gip_unregister_client);
 
