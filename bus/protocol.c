@@ -1651,11 +1651,14 @@ static int gip_process_pkt_chunked(struct gip_client *client,
 		return 0;
 	}
 
-	/* empty chunk signals the completion of the transfer */
-	err = gip_dispatch_pkt(client, hdr, buf->data, buf->length);
-
-	kfree(buf);
+	/*
+	 * Empty chunk signals the completion of the transfer. Detach the
+	 * buffer first: a status packet can remove the client, after which
+	 * the unregister work may free it at any time.
+	 */
 	client->chunk_buf_out = NULL;
+	err = gip_dispatch_pkt(client, hdr, buf->data, buf->length);
+	kfree(buf);
 
 	return err;
 }

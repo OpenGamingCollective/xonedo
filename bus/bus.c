@@ -38,14 +38,30 @@ static int gip_client_uevent(const struct device *dev,
 	return add_uevent_var(env, "MODALIAS=gip:%s", classes->strings[0]);
 }
 
-static void gip_client_release(struct device *dev)
+static void gip_free_client(struct gip_client *client)
 {
-	struct gip_client *client = to_gip_client(dev);
-
 	gip_free_client_info(client);
 	kfree(client->chunk_buf_out);
 	kfree(client->chunk_buf_in);
 	kfree(client);
+}
+
+static void gip_client_release(struct device *dev)
+{
+	gip_free_client(to_gip_client(dev));
+}
+
+/*
+ * A client that never got through identification has no registered device,
+ * so nothing would ever free it. dev.type is only set once device_register()
+ * was tried; after a failed register, put_device() frees it via release.
+ */
+static void gip_discard_client(struct gip_client *client)
+{
+	if (client->dev.type)
+		put_device(&client->dev);
+	else
+		gip_free_client(client);
 }
 
 static struct device_type gip_client_type = {
@@ -194,10 +210,13 @@ void gip_destroy_adapter(struct gip_adapter *adap)
 
 	for (i = GIP_MAX_CLIENTS - 1; i >= 0; i--) {
 		client = adap->clients[i];
-		if (!client || !device_is_registered(&client->dev))
+		if (!client)
 			continue;
 
-		device_unregister(&client->dev);
+		if (device_is_registered(&client->dev))
+			device_unregister(&client->dev);
+		else
+			gip_discard_client(client);
 	}
 
 	ida_free(&gip_adapter_ida, adap->id);
@@ -245,8 +264,10 @@ static void gip_unregister_client(struct work_struct *work)
 	struct gip_client *client = container_of(work, typeof(*client),
 						 work_unregister);
 
-	if (!device_is_registered(&client->dev))
+	if (!device_is_registered(&client->dev)) {
+		gip_discard_client(client);
 		return;
+	}
 
 	dev_dbg(&client->dev, "%s: unregistered\n", __func__);
 	device_unregister(&client->dev);
