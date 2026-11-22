@@ -308,6 +308,7 @@ void gip_free_client_info(struct gip_client *client)
 	kfree(client->hid_descriptor);
 
 	client->client_commands = NULL;
+	client->firmware_versions = NULL;
 	client->audio_formats = NULL;
 	client->capabilities_out = NULL;
 	client->capabilities_in = NULL;
