@@ -1241,6 +1241,13 @@ static int xone_dongle_power_off_clients(struct xone_dongle *dongle)
 	if (dongle->fw_state != XONE_DONGLE_FW_STATE_READY)
 		return 0;
 
+	/*
+	 * Unplugged: the power-off packets can't be sent, so waiting for the
+	 * clients to disconnect would only time out.
+	 */
+	if (dongle->mt.udev->state == USB_STATE_NOTATTACHED)
+		return 0;
+
 	for (int i = 0; i < XONE_DONGLE_MAX_CLIENTS; i++)
 		xone_dongle_power_off_client(dongle, i, true);
 
