@@ -522,20 +522,20 @@ static void gip_auth_complete_handshake(struct work_struct *work)
 		return;
 	}
 
-	dev_dbg(&auth->client->dev, "%s: key=%*phD\n", __func__,
-		(int)sizeof(key), key);
-
 	err = gip_auth_send_complete(auth->client);
 	if (err) {
 		dev_err(&auth->client->dev, "%s: send complete failed: %d\n",
 			__func__, err);
-		return;
+		goto out_wipe;
 	}
 
 	err = gip_set_encryption_key(auth->client, key, sizeof(key));
 	if (err)
 		dev_err(&auth->client->dev,
 			"%s: set encryption key failed: %d\n", __func__, err);
+
+out_wipe:
+	memzero_explicit(key, sizeof(key));
 }
 
 static int gip_auth_dispatch_pkt(struct gip_auth *auth,
