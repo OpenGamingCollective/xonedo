@@ -199,6 +199,10 @@ static bool gip_headset_copy_capture(struct gip_headset_stream *stream,
 	size_t buf_size = snd_pcm_lib_buffer_bytes(stream->substream);
 	size_t remaining = buf_size - stream->pointer;
 
+	/* len comes from the headset: never write past the ALSA buffer */
+	if (len > buf_size)
+		len = buf_size;
+
 	if (len <= remaining) {
 		memcpy(dest + stream->pointer, data, len);
 	} else {
@@ -571,11 +575,16 @@ static void gip_headset_remove(struct gip_client *client)
 {
 	struct gip_headset *headset = dev_get_drvdata(&client->dev);
 
+	/*
+	 * start_audio_timer schedules work_register, which starts the sample
+	 * timer: stop them in that order, or a late start re-arms what was
+	 * already cancelled.
+	 */
+	hrtimer_cancel(&headset->start_audio_timer);
 	cancel_work_sync(&headset->work_config);
 	cancel_delayed_work_sync(&headset->work_power_on);
 	cancel_work_sync(&headset->work_register);
 	hrtimer_cancel(&headset->timer);
-	hrtimer_cancel(&headset->start_audio_timer);
 	gip_disable_audio(client);
 }
 
